@@ -1,6 +1,8 @@
-/*─────────────────────────────────────────────────────────────────────────────
- *  org.albi.core.data.StatManagement   (fixed Redis handling)
- *───────────────────────────────────────────────────────────────────────────*/
+/*
+ *  org.albi.core.data.StatManagement
+ **/
+
+// Comments have been refactored to be clearer and concise ig.
 
 package org.albi.core.data;
 
@@ -24,9 +26,7 @@ import java.util.function.Function;
 
 public final class StatManagement {
 
-    /*─────────────────────────────────────────────────────────────────────────*/
-    /*  PUBLIC FACADE (unchanged)                                             */
-    /*─────────────────────────────────────────────────────────────────────────*/
+
     public static void init(Plugin plugin, Config cfg) {
         INTERNAL.store = new StatStore(plugin, cfg);
         INTERNAL.plugin = plugin;
@@ -42,16 +42,16 @@ public final class StatManagement {
             Bukkit.getScheduler().runTaskAsynchronously(
                     INTERNAL.plugin, () -> INTERNAL.store.save(ps));
 
-        MainPlayer mp = INTERNAL.mainCache.remove(id);                     // NEW
+        MainPlayer mp = INTERNAL.mainCache.remove(id);
         if (mp != null)
             Bukkit.getScheduler().runTaskAsynchronously(
-                    INTERNAL.plugin, () -> INTERNAL.store.saveMain(mp));       // NEW
+                    INTERNAL.plugin, () -> INTERNAL.store.saveMain(mp)); 
     }
 
     public static void flushAllAsync() {
         Bukkit.getScheduler().runTaskAsynchronously(INTERNAL.plugin, () -> {
             INTERNAL.cache.values().forEach(INTERNAL.store::save);
-            INTERNAL.mainCache.values().forEach(INTERNAL.store::saveMain);  // NEW
+            INTERNAL.mainCache.values().forEach(INTERNAL.store::saveMain);
         });
     }
 
@@ -71,7 +71,6 @@ public final class StatManagement {
         return INTERNAL.store.getRedis();
     }
 
-    /*────────────────── MAIN‑PROFILE FACADE ──────────────────*/
     public static MainPlayer getMain(UUID id) {
         return INTERNAL.mainCache.computeIfAbsent(id, INTERNAL.store::loadMain);
     }
@@ -87,7 +86,7 @@ public final class StatManagement {
     }
 
 
-    /*────────────────── internal glue ──────────────────*/
+    /* internal glue */
     private static final class INTERNAL {
         private static StatStore store;
         private static Plugin    plugin;
@@ -97,7 +96,7 @@ public final class StatManagement {
     }
 
 
-    /*────────────────── simple records/enums ───────────*/
+    /* simple records/enums */
     public record Config(
             String mysqlJdbc, String mysqlUser, String mysqlPass,
             String redisHost, int redisPort, String redisPass){}
@@ -108,14 +107,14 @@ public final class StatManagement {
     }
     public record LBRow(UUID uuid,long score){}
 
-    /*────────────────── stat beans (unchanged) ─────────*/
+    /* stat beans (unchanged) */
     public static final class Stat {
         private static final Gson G = new Gson();
 
-        /* ── numeric fields ── */
+        /*  numeric fields  */
         private int kills, deaths, wins, winStreak, roundsPlayed, timePlayed;
 
-        /* ── increment helpers ── */
+        /*  increment helpers  */
         public void addKills(int n)       { kills        += n; }
         public void addDeaths(int n)      { deaths       += n; }
         public void addWin() {            /* one win = +1 wins, +1 winStreak */
@@ -125,7 +124,7 @@ public final class StatManagement {
         public void addRound()            { roundsPlayed += 1; }
         public void addTime(int seconds)  { timePlayed   += seconds; }
 
-        /* ── getters (use in leaderboards or API) ── */
+        /*  getters (use in leaderboards or API)  */
         public int kills()        { return kills; }
         public int deaths()       { return deaths; }
         public int wins()         { return wins; }
@@ -162,7 +161,7 @@ public final class StatManagement {
     }
 
     /*════════════════════════════════════════════════════
-     *   StatStore  (NOW WITH ROBUST REDIS WRAPPER)
+     *   StatStore
      *══════════════════════════════════════════════════*/
     private static final class StatStore {
 
@@ -203,7 +202,7 @@ public final class StatManagement {
             return redis;
         }
 
-        /*────────────────── MAIN‐PROFILE LOAD ──────────────────*/
+        /* MAIN‐PROFILE LOAD */
         MainPlayer loadMain(UUID id) {
             String key = "main:" + id;
 
@@ -230,17 +229,17 @@ public final class StatManagement {
             return new MainPlayer(id);      // brand‑new profile
         }
 
-        /*────────────────── MAIN‐PROFILE SAVE ──────────────────*/
+        /* MAIN‐PROFILE SAVE */
         void saveMain(MainPlayer mp) {
             if (!mp.isDirty()) return;
 
             String key  = "main:" + mp.uuid();
             String json = mp.toJson();
 
-            /* 1️⃣  Redis */
+            /* 1 Redis */
             redis.withJedis(j -> { j.setex(key, (int) TTL, json); return null; });
 
-            /* 2️⃣  SQL (upsert) */
+            /* 2  SQL (upsert) */
             try (Connection c = sql.getConnection();
                  PreparedStatement ps = c.prepareStatement(
                          """
@@ -290,7 +289,7 @@ public final class StatManagement {
 
 
 
-        /* ───── load ───── */
+        /*  load  */
         PlayerStat load(UUID id,String name){
             String key="stats:"+id;
             String js = redis.withJedis(j -> j.get(key));
@@ -311,7 +310,7 @@ public final class StatManagement {
             return new PlayerStat(id);
         }
 
-        /* ───── save ───── */
+        /*  save  */
         void save(PlayerStat p){
             if(!p.isDirty()) return;
             String key="stats:"+p.uuid();
@@ -337,7 +336,7 @@ public final class StatManagement {
             p.clearDirty();
         }
 
-        /* ───── leaderboard ───── */
+        /*  leaderboard  */
         List<Map.Entry<UUID,Long>> top(String g,String f,int n){
             return redis.withJedis(j -> {
                 List<Map.Entry<UUID,Long>> list=new ArrayList<>();
@@ -366,7 +365,7 @@ public final class StatManagement {
         private static String lb(String g,String f){return "lb:"+g.replace(' ','_')+":"+f;}
     }
 
-    /*──────────────────────────────────────── RedisWrapper ────────────────*/
+    /* RedisWrapper */
     public static final class RedisWrapper {
         private final Plugin plugin;
         private final String host; private final int port; private final String password;
@@ -407,5 +406,3 @@ public final class StatManagement {
         public void close(){ if(pool!=null && !pool.isClosed()) pool.close(); }
     }
 }
-
-// comments generated by chatgpt!
